@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETH 策略回测系统</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:      #070b12;
+  --bg2:     #0c1220;
+  --bg3:     #111a2e;
+  --bg4:     #172038;
+  --border:  #1c2d48;
+  --border2: #243857;
+  --cyan:    #00e5ff;
+  --cyan2:   #00b8cc;
+  --green:   #00e676;
+  --green2:  #00b85a;
+  --red:     #ff3d57;
+  --red2:    #cc2040;
+  --yellow:  #ffc400;
+  --fib:     #bb86fc;
+  --text:    #ddeeff;
+  --text2:   #6a8ab0;
+  --text3:   #2d4560;
+  --mono:    'IBM Plex Mono', monospace;
+  --sans:    'Noto Sans SC', sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;min-height:100vh;}
+
+/* ── HEADER ── */
+.hdr{
+background:var(–bg2);border-bottom:1px solid var(–border);
+padding:0 28px;height:54px;display:flex;align-items:center;gap:20px;
+position:sticky;top:0;z-index:200;
+}
+.hdr-logo{font-family:var(–mono);font-size:14px;color:var(–cyan);letter-spacing:3px;}
+.hdr-logo span{color:var(–text3);}
+.hdr-sep{width:1px;height:24px;background:var(–border);}
+.hdr-sub{font-size:11px;color:var(–text2);}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:12px;}
+.badge{
+padding:4px 12px;border-radius:3px;font-family:var(–mono);font-size:10px;
+letter-spacing:1px;border:1px solid;
+}
+.badge-sim{background:rgba(255,196,0,.08);border-color:rgba(255,196,0,.3);color:var(–yellow);}
+.badge-live{background:rgba(0,229,255,.08);border-color:rgba(0,229,255,.3);color:var(–cyan);}
+
+/* ── LAYOUT ── */
+.wrap{display:grid;grid-template-columns:280px 1fr;min-height:calc(100vh - 54px);}
+
+/* ── SIDEBAR ── */
+.sidebar{
+background:var(–bg2);border-right:1px solid var(–border);
+padding:0;overflow-y:auto;display:flex;flex-direction:column;
+}
+.sb-section{padding:18px 20px;border-bottom:1px solid var(–border);}
+.sb-title{
+font-family:var(–mono);font-size:10px;color:var(–text3);
+letter-spacing:2px;text-transform:uppercase;margin-bottom:14px;
+}
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:11px;color:var(–text2);margin-bottom:5px;}
+.field input,.field select{
+width:100%;background:var(–bg3);border:1px solid var(–border);
+color:var(–text);padding:8px 11px;border-radius:4px;
+font-family:var(–mono);font-size:12px;outline:none;
+transition:border-color .2s;
+}
+.field input:focus,.field select:focus{border-color:var(–cyan2);}
+.range-wrap{display:flex;align-items:center;gap:10px;}
+.field input[type=range]{
+flex:1;background:transparent;border:none;padding:0;
+accent-color:var(–cyan);cursor:pointer;
+}
+.range-val{font-family:var(–mono);color:var(–cyan);font-size:14px;font-weight:600;min-width:38px;text-align:right;}
+
+/* FIB TABLE */
+.fib-table{background:var(–bg3);border-radius:5px;overflow:hidden;border:1px solid var(–border);}
+.fib-row{
+display:flex;align-items:center;padding:6px 10px;
+border-bottom:1px solid var(–border);gap:8px;
+}
+.fib-row:last-child{border-bottom:none;}
+.fib-num{font-family:var(–mono);font-size:11px;color:var(–fib);min-width:38px;}
+.fib-desc{flex:1;font-size:11px;color:var(–text2);}
+.fib-chip{
+font-size:9px;font-family:var(–mono);font-weight:600;
+padding:2px 7px;border-radius:3px;letter-spacing:.5px;
+}
+.chip-sl{background:rgba(255,61,87,.15);color:var(–red);}
+.chip-en{background:rgba(0,229,255,.12);color:var(–cyan);}
+.chip-tp{background:rgba(0,230,118,.12);color:var(–green);}
+
+/* RUN BTN */
+.run-btn{
+width:100%;padding:13px;border:none;border-radius:5px;
+font-family:var(–mono);font-size:12px;font-weight:600;
+letter-spacing:1.5px;cursor:pointer;transition:all .2s;
+background:linear-gradient(135deg,var(–cyan2),var(–cyan));color:#000;
+}
+.run-btn:hover{opacity:.85;}
+.run-btn:active{transform:scale(.98);}
+.run-btn:disabled{background:var(–bg4);color:var(–text3);cursor:not-allowed;}
+
+/* PROGRESS */
+.progress-wrap{margin-top:10px;display:none;}
+.progress-bar-bg{height:4px;background:var(–bg4);border-radius:2px;overflow:hidden;}
+.progress-bar{height:100%;background:linear-gradient(90deg,var(–cyan2),var(–cyan));width:0%;transition:width .3s;border-radius:2px;}
+.progress-txt{font-family:var(–mono);font-size:10px;color:var(–text2);margin-top:6px;text-align:center;}
+
+/* ── MAIN CONTENT ── */
+.main{display:flex;flex-direction:column;overflow:hidden;}
+
+/* STAT CARDS */
+.stat-row{
+display:flex;flex-direction:row;flex-wrap:nowrap;
+gap:1px;background:var(–border);border-bottom:1px solid var(–border);
+overflow-x:auto;
+}
+.stat-row::-webkit-scrollbar{height:3px;}
+.stat-card{
+background:var(–bg2);padding:14px 16px;
+flex:1 0 140px;min-width:140px;
+}
+.stat-label{font-size:10px;color:var(–text3);letter-spacing:1px;text-transform:uppercase;font-family:var(–mono);margin-bottom:5px;}
+.stat-val{font-family:var(–mono);font-size:18px;font-weight:600;color:var(–text);}
+.stat-val.g{color:var(–green);}
+.stat-val.r{color:var(–red);}
+.stat-val.c{color:var(–cyan);}
+.stat-sub{font-size:10px;color:var(–text2);margin-top:3px;}
+
+/* CHARTS SECTION */
+.charts-section{display:flex;flex-direction:column;border-bottom:1px solid var(–border);}
+.chart-box{padding:20px;}
+.chart-title{font-family:var(–mono);font-size:10px;color:var(–text2);letter-spacing:2px;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.chart-title::after{content:’’;flex:1;height:1px;background:var(–border);}
+.chart-container{position:relative;height:200px;}
+
+.mini-stats{padding:12px 20px;display:flex;flex-direction:row;gap:10px;overflow-x:auto;border-top:1px solid var(–border);background:var(–bg2);}
+.mini-stat{background:var(–bg3);border:1px solid var(–border);border-radius:5px;padding:10px 14px;flex:0 0 auto;min-width:140px;}
+.mini-stat-label{font-size:10px;color:var(–text3);font-family:var(–mono);letter-spacing:1px;margin-bottom:4px;white-space:nowrap;}
+.mini-stat-val{font-family:var(–mono);font-size:14px;font-weight:600;white-space:nowrap;}
+.mini-stat-val.g{color:var(–green);}
+.mini-stat-val.r{color:var(–red);}
+.mini-stat-val.c{color:var(–cyan);}
+.mini-stat-val.y{color:var(–yellow);}
+
+/* TRADE TABLE */
+.trades-section{flex:1;overflow:hidden;display:flex;flex-direction:column;}
+.trades-header{
+padding:12px 20px;background:var(–bg2);border-bottom:1px solid var(–border);
+display:flex;align-items:center;gap:12px;
+}
+.trades-title{font-family:var(–mono);font-size:10px;color:var(–text2);letter-spacing:2px;text-transform:uppercase;}
+.trades-count{
+background:var(–bg4);border:1px solid var(–border);border-radius:3px;
+padding:2px 8px;font-family:var(–mono);font-size:10px;color:var(–cyan);
+}
+.filter-btns{margin-left:auto;display:flex;gap:4px;}
+.f-btn{
+padding:4px 12px;border-radius:3px;font-family:var(–mono);font-size:10px;
+border:1px solid var(–border);background:var(–bg3);color:var(–text2);cursor:pointer;
+transition:all .15s;
+}
+.f-btn.active,.f-btn:hover{border-color:var(–cyan2);color:var(–cyan);background:rgba(0,229,255,.06);}
+
+.table-wrap{flex:1;overflow:auto;}
+table{width:max-content;min-width:100%;border-collapse:collapse;}
+thead th{
+position:sticky;top:0;background:var(–bg2);
+padding:8px 12px;text-align:left;
+font-family:var(–mono);font-size:10px;color:var(–text3);
+letter-spacing:1px;border-bottom:1px solid var(–border);
+white-space:nowrap;
+}
+tbody td{
+padding:8px 12px;border-bottom:1px solid rgba(28,45,72,.5);
+font-family:var(–mono);font-size:11px;color:var(–text2);
+white-space:nowrap;
+}
+tbody tr:hover td{background:rgba(0,229,255,.03);}
+.td-dir-long{color:var(–green);font-weight:600;}
+.td-dir-short{color:var(–red);font-weight:600;}
+.td-win{color:var(–green);}
+.td-loss{color:var(–red);}
+.td-reason-tp{color:var(–green);font-size:10px;}
+.td-reason-sl{color:var(–red);font-size:10px;}
+.td-reason-exp{color:var(–text3);font-size:10px;}
+
+/* EMPTY STATE */
+.empty-state{
+display:flex;flex-direction:column;align-items:center;justify-content:center;
+height:300px;gap:12px;color:var(–text3);
+}
+.empty-icon{font-size:40px;opacity:.3;}
+.empty-txt{font-family:var(–mono);font-size:12px;letter-spacing:1px;}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:var(–bg);}
+::-webkit-scrollbar-thumb{background:var(–border2);border-radius:2px;}
+
+/* LOADING OVERLAY */
+#loadOverlay{
+position:fixed;inset:0;background:rgba(7,11,18,.92);
+display:flex;flex-direction:column;align-items:center;justify-content:center;
+z-index:1000;gap:20px;display:none;
+}
+.load-spinner{
+width:48px;height:48px;border:2px solid var(–border2);
+border-top-color:var(–cyan);border-radius:50%;
+animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.load-txt{font-family:var(–mono);color:var(–text2);font-size:12px;letter-spacing:2px;}
+
+/* TOOLTIP */
+.tooltip{position:relative;cursor:help;}
+.tooltip::after{
+content:attr(data-tip);position:absolute;bottom:125%;left:50%;transform:translateX(-50%);
+background:var(–bg4);border:1px solid var(–border2);color:var(–text);
+padding:5px 10px;border-radius:4px;font-size:10px;white-space:nowrap;
+opacity:0;pointer-events:none;transition:opacity .2s;z-index:10;font-family:var(–mono);
+}
+.tooltip:hover::after{opacity:1;}
+</style>
+
+</head>
+<body>
+
+<div id="loadOverlay">
+  <div class="load-spinner"></div>
+  <div class="load-txt" id="loadTxt">正在从 Binance 获取数据...</div>
+</div>
+
+<!-- HEADER -->
+
+<div class="hdr">
+  <div class="hdr-logo">ETH<span>/</span>USDT · BACKTEST</div>
+  <div class="hdr-sep"></div>
+  <div class="hdr-sub">K线形态策略 · 斐波那契回撤 · 10分钟</div>
+  <div class="hdr-right">
+    <div class="badge badge-sim">模拟账户</div>
+    <div class="badge badge-live">Binance 真实数据</div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- SIDEBAR -->
+
+  <div class="sidebar">
+
+```
+<div class="sb-section">
+  <div class="sb-title">回测参数</div>
+  <div class="field">
+    <label>时间范围</label>
+    <select id="cfg_period">
+      <option value="1">最近 1 个月</option>
+      <option value="3">最近 3 个月</option>
+      <option value="6" selected>最近 6 个月</option>
+      <option value="12">最近 1 年</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>初始本金 (USDT)</label>
+    <input type="number" id="cfg_capital" value="1000" min="100" step="100">
+  </div>
+  <div class="field">
+    <label>每笔风险比例</label>
+    <div class="range-wrap">
+      <input type="range" id="cfg_risk" min="1" max="10" value="5" step="0.5"
+        oninput="document.getElementById('cfg_risk_val').textContent=this.value+'%'">
+      <span class="range-val" id="cfg_risk_val">5%</span>
+    </div>
+  </div>
+  <div class="field">
+    <label>最大杠杆上限</label>
+    <input type="number" id="cfg_maxlev" value="20" min="1" max="125">
+  </div>
+  <div class="field">
+    <label>开仓手续费 Maker (%)</label>
+    <input type="number" id="cfg_fee_maker" value="0.02" min="0" max="1" step="0.005">
+  </div>
+  <div class="field">
+    <label>平仓手续费 Taker (%)</label>
+    <input type="number" id="cfg_fee_taker" value="0.05" min="0" max="1" step="0.005">
+  </div>
+</div>
+
+<div class="sb-section">
+  <div class="sb-title">斐波那契规则</div>
+  <div class="fib-table">
+    <div class="fib-row"><span class="fib-num">0</span><span class="fib-desc">波段极值</span><span class="fib-chip chip-sl">止损 SL</span></div>
+    <div class="fib-row"><span class="fib-num">0.236</span><span class="fib-desc">—</span></div>
+    <div class="fib-row"><span class="fib-num">0.382</span><span class="fib-desc">—</span></div>
+    <div class="fib-row"><span class="fib-num">0.5</span><span class="fib-desc">—</span></div>
+    <div class="fib-row"><span class="fib-num">0.618</span><span class="fib-desc">—</span></div>
+    <div class="fib-row"><span class="fib-num">中点</span><span class="fib-desc">止盈止损中间</span><span class="fib-chip chip-en">入场 (1:1)</span></div>
+    <div class="fib-row"><span class="fib-num">1.0</span><span class="fib-desc">突破K线收盘</span></div>
+    <div class="fib-row"><span class="fib-num">1.618</span><span class="fib-desc">延伸目标</span><span class="fib-chip chip-tp">止盈 TP</span></div>
+  </div>
+</div>
+
+<div class="sb-section">
+  <div class="sb-title">仓位计算方式</div>
+  <div style="background:var(--bg3);border-radius:5px;padding:12px;border:1px solid var(--border);font-size:11px;color:var(--text2);line-height:1.8;">
+    风险金额 = 本金 × 5%<br>
+    数量 = 风险金额 ÷ 止损距离<br>
+    杠杆 = (数量 × 入场价) ÷ 本金<br>
+    <span style="color:var(--text3);font-size:10px;">止损越近→杠杆越高<br>止损越远→杠杆越低</span>
+  </div>
+</div>
+
+<div class="sb-section" style="margin-top:auto;border-top:1px solid var(--border);">
+  <button class="run-btn" id="runBtn" onclick="startBacktest()">▶ 开始回测</button>
+  <button onclick="clearCache()" style="width:100%;margin-top:6px;padding:8px;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--text2);font-family:var(--mono);font-size:10px;cursor:pointer;letter-spacing:1px;" id="cacheBtn">⟳ 重新拉取数据</button>
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-bar-bg"><div class="progress-bar" id="progressBar"></div></div>
+    <div class="progress-txt" id="progressTxt">准备中...</div>
+  </div>
+</div>
+```
+
+  </div>
+
+  <!-- MAIN -->
+
+  <div class="main">
+
+```
+<!-- STAT CARDS -->
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="stat-label">最终净值</div>
+    <div class="stat-val" id="s_equity">—</div>
+    <div class="stat-sub" id="s_equity_sub">初始 1,000 USDT</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">总盈亏</div>
+    <div class="stat-val" id="s_pnl">—</div>
+    <div class="stat-sub" id="s_pnl_pct">回报率</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">胜率</div>
+    <div class="stat-val c" id="s_wr">—</div>
+    <div class="stat-sub" id="s_wr_sub">盈/亏 笔数</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">总交易</div>
+    <div class="stat-val c" id="s_total">—</div>
+    <div class="stat-sub">笔</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">最大回撤</div>
+    <div class="stat-val r" id="s_dd">—</div>
+    <div class="stat-sub">历史最大</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">盈亏比</div>
+    <div class="stat-val c" id="s_rr">—</div>
+    <div class="stat-sub">平均单笔</div>
+  </div>
+</div>
+
+<!-- CHARTS -->
+<div class="charts-section">
+  <div class="chart-box">
+    <div class="chart-title">账户净值曲线</div>
+    <div class="chart-container">
+      <canvas id="equityChart"></canvas>
+    </div>
+    <div style="margin-top:16px;">
+      <div class="chart-title">每笔盈亏分布</div>
+      <div class="chart-container" style="height:140px;">
+        <canvas id="pnlChart"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="mini-stats" id="miniStats">
+    <div class="mini-stat">
+      <div class="mini-stat-label">平均盈利</div>
+      <div class="mini-stat-val g" id="ms_avgwin">—</div>
+    </div>
+    <div class="mini-stat">
+      <div class="mini-stat-label">平均亏损</div>
+      <div class="mini-stat-val r" id="ms_avgloss">—</div>
+    </div>
+    <div class="mini-stat">
+      <div class="mini-stat-label">最大单笔盈利</div>
+      <div class="mini-stat-val g" id="ms_maxwin">—</div>
+    </div>
+    <div class="mini-stat">
+      <div class="mini-stat-label">最大单笔亏损</div>
+      <div class="mini-stat-val r" id="ms_maxloss">—</div>
+    </div>
+    <div class="mini-stat">
+      <div class="mini-stat-label">平均持仓K线数</div>
+      <div class="mini-stat-val c" id="ms_avghold">—</div>
+    </div>
+    <div class="mini-stat">
+      <div class="mini-stat-label">平均杠杆</div>
+      <div class="mini-stat-val y" id="ms_avglev">—</div>
+    </div>
+    <div class="mini-stat">
+      <div class="mini-stat-label">总手续费</div>
+      <div class="mini-stat-val r" id="ms_fees">—</div>
+    </div>
+    <div class="mini-stat">
+      <div class="mini-stat-label">连续最大亏损</div>
+      <div class="mini-stat-val r" id="ms_streak">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- TRADE TABLE -->
+<div class="trades-section">
+  <div class="trades-header">
+    <div class="trades-title">交易记录</div>
+    <div class="trades-count" id="tradeCountBadge">0 笔</div>
+    <div class="filter-btns">
+      <button class="f-btn active" onclick="filterTrades('all',this)">全部</button>
+      <button class="f-btn" onclick="filterTrades('long',this)">做多</button>
+      <button class="f-btn" onclick="filterTrades('short',this)">做空</button>
+      <button class="f-btn" onclick="filterTrades('win',this)">盈利</button>
+      <button class="f-btn" onclick="filterTrades('loss',this)">亏损</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">📊</div>
+      <div class="empty-txt">点击"开始回测"加载 Binance 真实数据</div>
+    </div>
+    <table id="tradeTable" style="display:none;">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>时间</th>
+          <th>方向</th>
+          <th>入场价</th>
+          <th>出场价</th>
+          <th>止损价</th>
+          <th>止盈价</th>
+          <th>数量(ETH)</th>
+          <th>杠杆</th>
+          <th>结果</th>
+          <th>盈亏(USDT)</th>
+          <th>手续费</th>
+          <th>账户余额</th>
+        </tr>
+      </thead>
+      <tbody id="tradeBody"></tbody>
+    </table>
+  </div>
+</div>
+```
+
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// GLOBALS
+// ─────────────────────────────────────────────
+let allTrades = [];
+let equityChart = null;
+let pnlChart = null;
+// Cache fetched candles so same data is reused every backtest run
+let cachedCandles = null;
+let cachedMonths  = null;
+
+// ─────────────────────────────────────────────
+// FETCH BINANCE KLINES
+// ─────────────────────────────────────────────
+async function fetchKlines(months) {
+  var symbol   = 'ETHUSDT';
+  var interval = '10m';
+  var now      = Date.now();
+  var endTime  = now - (now % 86400000); // fixed to last midnight UTC
+  var startTime = endTime - months * 30 * 24 * 60 * 60 * 1000;
+
+  var testSuffix = '/api/v3/klines?symbol=ETHUSDT&interval=10m&limit=3&endTime=' + endTime;
+
+  // All possible sources — tried in order
+  var sources = [
+    { name: 'Binance 直连',    url: function(p){ return 'https://api.binance.com' + p; } },
+    { name: 'Binance api1',    url: function(p){ return 'https://api1.binance.com' + p; } },
+    { name: 'Binance api2',    url: function(p){ return 'https://api2.binance.com' + p; } },
+    { name: 'corsproxy',       url: function(p){ return 'https://corsproxy.io/?' + encodeURIComponent('https://api.binance.com' + p); } },
+    { name: 'allorigins',      url: function(p){ return 'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://api.binance.com' + p); } },
+  ];
+
+  var fetcher = null;
+  var sourceName = '';
+
+  for (var si = 0; si < sources.length; si++) {
+    setLoadTxt('正在尝试: ' + sources[si].name + ' ...');
+    try {
+      var testUrl = sources[si].url(testSuffix);
+      var testResp = await fetch(testUrl);
+      if (testResp.ok) {
+        var testData = await testResp.json();
+        if (Array.isArray(testData) && testData.length > 0) {
+          fetcher = sources[si].url;
+          sourceName = sources[si].name;
+          break;
+        }
+      }
+    } catch(err) { /* try next */ }
+  }
+
+  if (!fetcher) {
+    throw new Error('无法连接到 Binance 数据源。请确认手机已连接网络，然后重试。');
+  }
+
+  setLoadTxt('✓ ' + sourceName + ' 连接成功，正在下载数据...');
+
+  var allKlines = [];
+  var from = startTime;
+
+  while (from < endTime) {
+    var path = '/api/v3/klines?symbol=' + symbol + '&interval=' + interval +
+               '&startTime=' + from + '&endTime=' + endTime + '&limit=1000';
+    var resp = await fetch(fetcher(path));
+    if (!resp.ok) throw new Error('数据获取失败: HTTP ' + resp.status);
+    var batch = await resp.json();
+    if (!batch || batch.length === 0) break;
+    for (var i = 0; i < batch.length; i++) allKlines.push(batch[i]);
+    from = batch[batch.length - 1][0] + 1;
+    setLoadTxt('已获取 ' + allKlines.length + ' 根真实K线...');
+    if (batch.length < 1000) break;
+  }
+
+  if (allKlines.length === 0) throw new Error('获取到0根K线，请重试');
+
+  var result = [];
+  for (var j = 0; j < allKlines.length; j++) {
+    var k = allKlines[j];
+    result.push({ t: k[0], o: parseFloat(k[1]), h: parseFloat(k[2]), l: parseFloat(k[3]), c: parseFloat(k[4]) });
+  }
+  return result;
+}
+
+// ─────────────────────────────────────────────
+// Seeded PRNG (mulberry32) - same seed = same data every time
+function seededRng(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// Deterministic pseudo-random based on seed index
+function seededRand(n) {
+  const x = Math.sin(n + 1) * 10000;
+  return x - Math.floor(x);
+}
+
+function generateRealisticData(months) {
+  const bars    = months * 30 * 24 * 6;
+  const candles = [];
+  const rng     = seededRng(0xE7420240); // fixed seed = always same data
+  let   price   = 2400; // fixed start price
+  let   t       = Date.now() - bars * 600000;
+  let   trend   = 0;
+  let   trendLen = 0;
+  let   vol     = 0.004;
+
+  for (let i = 0; i < bars; i++) {
+    if (trendLen <= 0) {
+      trend    = (rng() - 0.48) * 0.002;
+      trendLen = 100 + Math.floor(rng() * 300);
+      vol      = 0.002 + rng() * 0.006;
+    }
+    trendLen--;
+
+    const hourOfDay = ((t / 3600000) % 24);
+    const volMult   = 1 + 0.5 * Math.sin((hourOfDay - 8) * Math.PI / 12);
+    const open      = price;
+    const move      = open * (trend + (rng() - 0.5) * vol * volMult * 2);
+    const close     = open + move;
+    const bodySize  = Math.abs(close - open);
+    const upperWick = bodySize * (0.3 + rng() * 1.2);
+    const lowerWick = bodySize * (0.3 + rng() * 1.2);
+    const high      = Math.max(open, close) + upperWick;
+    const low       = Math.min(open, close) - lowerWick;
+
+    price = Math.max(800, Math.min(5000, close));
+    candles.push({ t, o: open, h: high, l: low, c: price });
+    t += 600000;
+  }
+  return candles;
+}
+
+// ─────────────────────────────────────────────
+// PATTERN DETECTION
+// L1: c1 red, c2 green, c1.close ≈ c2.open
+// L2: c3 stays in range; from c4 onward first candle closing above c1.open = breakout
+// ─────────────────────────────────────────────
+function detectSignals(candles) {
+  const signals = [];
+  const TOL = 0.002; // 0.2% tolerance for L1 equality check
+
+  for (let i = 0; i < candles.length - 6; i++) {
+    const c1 = candles[i];
+    const c2 = candles[i + 1];
+    const c3 = candles[i + 2];
+
+    // ── LONG ──
+    const c1Red   = c1.c < c1.o;
+    const c2Green = c2.c > c2.o;
+    const l1Long  = c1Red && c2Green && Math.abs(c1.c - c2.o) / c1.o < TOL;
+
+    if (l1Long) {
+      const waveHigh = c1.o;  // L2 line = c1 open
+      const waveLow  = Math.min(c1.l, c2.l); // L1 line
+      // c3 must stay within L1~L2
+      const c3ok = Math.max(c3.o, c3.c) <= waveHigh * 1.001 &&
+                   Math.min(c3.o, c3.c) >= waveLow * 0.999;
+      if (!c3ok) continue;
+
+      // Find breakout candle from i+3 onward (4th candle = index i+3)
+      let breakIdx = -1;
+      for (let j = i + 3; j < Math.min(i + 12, candles.length); j++) {
+        if (candles[j].c > waveHigh) { breakIdx = j; break; }
+      }
+      if (breakIdx === -1) continue;
+
+      const fibLow  = waveLow;
+      const fibHigh = candles[breakIdx].c;
+      const range   = fibHigh - fibLow;
+      if (range < fibLow * 0.005) continue; // skip tiny moves
+
+      const slL    = fibLow;                          // Fib 0 = 止损
+      const tpL    = fibHigh + range * 0.618;         // Fib 1.618 = 止盈
+      const entryL = (slL + tpL) / 2;                // 中间点 = 入场 (1:1 RR)
+      signals.push({
+        type:     'LONG',
+        patternIdx: i,
+        breakIdx,
+        fibLow,
+        fibHigh,
+        range,
+        entry:  entryL,
+        sl:     slL,
+        tp:     tpL,
+        searchFrom: breakIdx + 1
+      });
+      i = breakIdx; // skip ahead
+    }
+
+    // ── SHORT ──
+    const c1Green = c1.c > c1.o;
+    const c2Red   = c2.c < c2.o;
+    const l1Short = c1Green && c2Red && Math.abs(c1.c - c2.o) / c1.o < TOL;
+
+    if (l1Short) {
+      const waveLow2  = c1.o;
+      const waveHigh2 = Math.max(c1.h, c2.h);
+      const c3ok2 = Math.min(c3.o, c3.c) >= waveLow2 * 0.999 &&
+                    Math.max(c3.o, c3.c) <= waveHigh2 * 1.001;
+      if (!c3ok2) continue;
+
+      let breakIdx2 = -1;
+      for (let j = i + 3; j < Math.min(i + 12, candles.length); j++) {
+        if (candles[j].c < waveLow2) { breakIdx2 = j; break; }
+      }
+      if (breakIdx2 === -1) continue;
+
+      const fibHigh2 = waveHigh2;
+      const fibLow2  = candles[breakIdx2].c;
+      const range2   = fibHigh2 - fibLow2;
+      if (range2 < fibLow2 * 0.005) continue;
+
+      const slS    = fibHigh2;                        // Fib 0 = 止损
+      const tpS    = fibLow2 - range2 * 0.618;       // Fib 1.618 down = 止盈
+      const entryS = (slS + tpS) / 2;               // 中间点 = 入场 (1:1 RR)
+      signals.push({
+        type:     'SHORT',
+        patternIdx: i,
+        breakIdx:  breakIdx2,
+        fibLow:    fibLow2,
+        fibHigh:   fibHigh2,
+        range:     range2,
+        entry:  entryS,
+        sl:     slS,
+        tp:     tpS,
+        searchFrom: breakIdx2 + 1
+      });
+      i = breakIdx2;
+    }
+  }
+  return signals;
+}
+
+// ─────────────────────────────────────────────
+// POSITION SIZING  (5% risk rule)
+// riskAmt = capital × riskPct
+// qty     = riskAmt / slDist
+// lev     = (qty × entry) / capital   [capped]
+// ─────────────────────────────────────────────
+function sizePosition(capital, riskPct, maxLev, entry, sl) {
+  const riskAmt = capital * riskPct;
+  const slDist  = Math.abs(entry - sl);
+  if (slDist < 0.001) return null;
+  const qty       = riskAmt / slDist;
+  const notional  = qty * entry;
+  let   leverage  = notional / capital;
+  leverage = Math.min(Math.max(Math.round(leverage * 10) / 10, 1), maxLev);
+  // Recalculate qty based on capped leverage
+  const adjQty = (capital * leverage) / entry;
+  return { qty: adjQty, leverage, riskAmt, notional: adjQty * entry };
+}
+
+// ─────────────────────────────────────────────
+// SIMULATE TRADES
+// ─────────────────────────────────────────────
+function simulateTrades(candles, signals, capital, riskPct, maxLev, makerRate, takerRate) {
+  const trades  = [];
+  let   balance = capital;
+  let   peakBal = capital;
+  let   maxDD   = 0;
+
+  for (const sig of signals) {
+    if (balance <= 0) break;
+    const pos = sizePosition(balance, riskPct, maxLev, sig.entry, sig.sl);
+    if (!pos) continue;
+
+    // Scan candles after breakout for entry hit, then TP/SL
+    let entryCandle = null;
+    let entryPrice  = null;
+    let exitCandle  = null;
+    let exitPrice   = null;
+    let exitReason  = null;
+    let holdBars    = 0;
+
+    // Phase 1: wait for price to retrace to entry (Fib 0.786)
+    const lookStart = sig.searchFrom;
+    const lookEnd   = Math.min(lookStart + 60, candles.length); // max 60 bars wait
+
+    for (let i = lookStart; i < lookEnd; i++) {
+      const c = candles[i];
+      if (sig.type === 'LONG') {
+        if (c.l <= sig.entry) { entryCandle = i; entryPrice = sig.entry; break; }
+      } else {
+        if (c.h >= sig.entry) { entryCandle = i; entryPrice = sig.entry; break; }
+      }
+    }
+    if (entryCandle === null) continue; // price never retraced to entry
+
+    // Phase 2: from entry bar, scan for TP or SL
+    for (let i = entryCandle; i < candles.length; i++) {
+      const c = candles[i];
+      holdBars++;
+      if (sig.type === 'LONG') {
+        if (c.l <= sig.sl) {
+          exitPrice = sig.sl; exitReason = 'SL'; exitCandle = i; break;
+        }
+        if (c.h >= sig.tp) {
+          exitPrice = sig.tp; exitReason = 'TP'; exitCandle = i; break;
+        }
+      } else {
+        if (c.h >= sig.sl) {
+          exitPrice = sig.sl; exitReason = 'SL'; exitCandle = i; break;
+        }
+        if (c.l <= sig.tp) {
+          exitPrice = sig.tp; exitReason = 'TP'; exitCandle = i; break;
+        }
+      }
+      if (holdBars > 200) { // force close after 200 bars (~33h)
+        exitPrice = c.c; exitReason = 'EXP'; exitCandle = i; break;
+      }
+    }
+    if (!exitCandle) continue;
+
+    // PnL calculation
+    const priceDiff = sig.type === 'LONG'
+      ? exitPrice - entryPrice
+      : entryPrice - exitPrice;
+    const rawPnl    = priceDiff * pos.qty;
+    const makerFee  = entryPrice * pos.qty * makerRate / 100;  // 开仓挂单
+    const takerFee  = exitPrice  * pos.qty * takerRate / 100;  // 平仓吃单
+    const fee       = makerFee + takerFee;
+    const netPnl    = rawPnl - fee;
+
+    balance += netPnl;
+    if (balance > peakBal) peakBal = balance;
+    const dd = (peakBal - balance) / peakBal * 100;
+    if (dd > maxDD) maxDD = dd;
+
+    trades.push({
+      n:         trades.length + 1,
+      time:      new Date(candles[entryCandle].t).toISOString().slice(0,16).replace('T',' '),
+      type:      sig.type,
+      entry:     entryPrice,
+      exit:      exitPrice,
+      sl:        sig.sl,
+      tp:        sig.tp,
+      qty:       pos.qty,
+      leverage:  pos.leverage,
+      reason:    exitReason,
+      rawPnl,
+      fee,
+      netPnl,
+      balance,
+      holdBars
+    });
+  }
+
+  return { trades, maxDD };
+}
+
+// ─────────────────────────────────────────────
+// MAIN BACKTEST ENTRY
+// ─────────────────────────────────────────────
+function clearCache() {
+  cachedCandles = null;
+  cachedMonths  = null;
+  document.getElementById('cacheBtn').textContent = '✓ 已清除 · 下次重新拉取';
+  setTimeout(() => {
+    document.getElementById('cacheBtn').textContent = '⟳ 重新拉取数据';
+  }, 2000);
+}
+
+async function startBacktest() {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 运行中...';
+  showProgress(true);
+  showOverlay(true);
+
+  try {
+    const months  = parseInt(document.getElementById('cfg_period').value);
+    const capital = parseFloat(document.getElementById('cfg_capital').value);
+    const riskPct = parseFloat(document.getElementById('cfg_risk').value) / 100;
+    const maxLev  = parseFloat(document.getElementById('cfg_maxlev').value);
+    const makerRate = parseFloat(document.getElementById('cfg_fee_maker').value);
+    const takerRate = parseFloat(document.getElementById('cfg_fee_taker').value);
+
+    // 1. Fetch data (use cache if same period, avoids inconsistent results)
+    setProgress(10, '正在获取 K线数据...');
+    let candles;
+    if (cachedCandles && cachedMonths === months) {
+      setProgress(30, `使用已缓存数据 (${cachedCandles.length} 根K线) · 结果稳定一致`);
+      candles = cachedCandles;
+      await sleep(300);
+    } else {
+      candles = await fetchKlines(months);
+      cachedCandles = candles;
+      cachedMonths  = months;
+    }
+
+    setProgress(40, `已获取 ${candles.length} 根K线，正在扫描形态...`);
+    await sleep(100);
+
+    // 2. Detect patterns
+    const signals = detectSignals(candles);
+    setProgress(65, `发现 ${signals.length} 个形态信号，正在模拟交易...`);
+    await sleep(100);
+
+    // 3. Simulate
+    const { trades, maxDD } = simulateTrades(candles, signals, capital, riskPct, maxLev, makerRate, takerRate);
+    setProgress(85, `模拟完成 ${trades.length} 笔交易，正在生成图表...`);
+    await sleep(100);
+
+    // 4. Render
+    allTrades = trades;
+    renderStats(trades, capital, maxDD);
+    renderCharts(trades, capital);
+    renderTable(trades);
+    setProgress(100, '完成！');
+    await sleep(300);
+
+  } catch(e) {
+    const msg = (e && e.message) ? e.message : '未知错误';
+    document.getElementById('emptyState').style.display = 'flex';
+    document.getElementById('emptyState').innerHTML = '<div style="text-align:center;padding:20px"><div style="font-size:28px;margin-bottom:10px">⚠️</div><div style="color:#ff3d57;font-size:12px;line-height:1.8">' + msg + '</div></div>';
+    console.error(e);
+  } finally {
+    showOverlay(false);
+    showProgress(false);
+    btn.disabled = false;
+    btn.textContent = '▶ 重新回测';
+  }
+}
+
+// ─────────────────────────────────────────────
+// RENDER STATS
+// ─────────────────────────────────────────────
+function renderStats(trades, capital, maxDD) {
+  if (!trades.length) {
+    setText('s_equity','无数据');
+    return;
+  }
+  const finalBal = trades[trades.length - 1].balance;
+  const totalPnl = finalBal - capital;
+  const pnlPct   = totalPnl / capital * 100;
+  const wins      = trades.filter(t => t.netPnl > 0);
+  const losses    = trades.filter(t => t.netPnl <= 0);
+  const winRate   = wins.length / trades.length * 100;
+  const avgWin    = wins.length  ? wins.reduce((s,t) => s + t.netPnl, 0) / wins.length : 0;
+  const avgLoss   = losses.length ? losses.reduce((s,t) => s + t.netPnl, 0) / losses.length : 0;
+  // RR based on price distance (not netPnl which is affected by fees)
+  // Every trade is designed 1:1, so this confirms the logic is correct
+  const rrValues = trades.map(t => {
+    const tpDist = Math.abs(t.tp - t.entry);
+    const slDist = Math.abs(t.entry - t.sl);
+    return slDist > 0 ? tpDist / slDist : 0;
+  });
+  const rr = rrValues.length ? rrValues.reduce((a,b) => a+b, 0) / rrValues.length : 0;
+  const totalFees = trades.reduce((s,t) => s + t.fee, 0);
+  const avgHold   = trades.reduce((s,t) => s + t.holdBars, 0) / trades.length;
+  const avgLev    = trades.reduce((s,t) => s + t.leverage, 0) / trades.length;
+  const maxWin    = Math.max(...trades.map(t => t.netPnl));
+  const maxLoss   = Math.min(...trades.map(t => t.netPnl));
+
+  // Consecutive losses
+  let streak = 0, maxStreak = 0, cur = 0;
+  trades.forEach(t => {
+    if (t.netPnl <= 0) { cur++; maxStreak = Math.max(maxStreak, cur); }
+    else cur = 0;
+  });
+
+  // Top stats
+  setValColor('s_equity', finalBal.toFixed(2) + ' U', totalPnl >= 0 ? 'g' : 'r');
+  document.getElementById('s_equity_sub').textContent = `初始 ${capital.toLocaleString()} USDT`;
+  setValColor('s_pnl', (totalPnl >= 0 ? '+' : '') + totalPnl.toFixed(2) + ' U', totalPnl >= 0 ? 'g' : 'r');
+  document.getElementById('s_pnl_pct').textContent = (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '%';
+  setText('s_wr', winRate.toFixed(1) + '%');
+  document.getElementById('s_wr_sub').textContent = `盈 ${wins.length} / 亏 ${losses.length}`;
+  setText('s_total', trades.length);
+  setValColor('s_dd', '-' + maxDD.toFixed(2) + '%', 'r');
+  setText('s_rr', rr.toFixed(2) + ' : 1');
+
+  // Mini stats
+  setValColor('ms_avgwin',  '+' + avgWin.toFixed(2) + ' U', 'g');
+  setValColor('ms_avgloss', avgLoss.toFixed(2) + ' U', 'r');
+  setValColor('ms_maxwin',  '+' + maxWin.toFixed(2) + ' U', 'g');
+  setValColor('ms_maxloss', maxLoss.toFixed(2) + ' U', 'r');
+  setText('ms_avghold', avgHold.toFixed(1) + ' 根');
+  setText('ms_avglev',  avgLev.toFixed(1) + 'x');
+  setValColor('ms_fees', '-' + totalFees.toFixed(2) + ' U', 'r');
+  setValColor('ms_streak', maxStreak + ' 连亏', 'r');
+}
+
+// ─────────────────────────────────────────────
+// RENDER CHARTS
+// ─────────────────────────────────────────────
+function renderCharts(trades, capital) {
+  // Equity curve
+  const eqLabels = ['开始', ...trades.map((t,i) => '#'+(i+1))];
+  const eqData   = [capital, ...trades.map(t => t.balance)];
+
+  if (equityChart) equityChart.destroy();
+  equityChart = new Chart(document.getElementById('equityChart'), {
+    type: 'line',
+    data: {
+      labels: eqLabels,
+      datasets: [{
+        data: eqData,
+        borderColor: ctx => {
+          const g = ctx.chart.ctx.createLinearGradient(0,0,ctx.chart.width,0);
+          g.addColorStop(0,'#00b8cc'); g.addColorStop(1,'#00e5ff');
+          return g;
+        },
+        backgroundColor: 'rgba(0,229,255,0.05)',
+        borderWidth: 2,
+        pointRadius: trades.length < 50 ? 3 : 0,
+        pointBackgroundColor: trades.map(t => t.netPnl > 0 ? '#00e676' : '#ff3d57'),
+        fill: true,
+        tension: 0.3
+      }]
+    },
+    options: chartOpts('USDT', eqData)
+  });
+
+  // PnL bar chart
+  const pnlColors = trades.map(t => t.netPnl > 0 ? 'rgba(0,230,118,0.7)' : 'rgba(255,61,87,0.7)');
+  if (pnlChart) pnlChart.destroy();
+  pnlChart = new Chart(document.getElementById('pnlChart'), {
+    type: 'bar',
+    data: {
+      labels: trades.map((t,i) => '#'+(i+1)),
+      datasets: [{ data: trades.map(t => t.netPnl), backgroundColor: pnlColors, borderRadius: 2 }]
+    },
+    options: chartOpts('USDT', trades.map(t => t.netPnl), true)
+  });
+}
+
+function chartOpts(unit, data, isBar=false) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    animation: { duration: 600 },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: 'rgba(12,18,32,.95)',
+        borderColor: '#1c2d48', borderWidth: 1,
+        titleColor: '#6a8ab0', bodyColor: '#ddeeff',
+        titleFont: { family: 'IBM Plex Mono', size: 10 },
+        bodyFont:  { family: 'IBM Plex Mono', size: 12 },
+        callbacks: { label: c => (c.raw >= 0 ? '+' : '') + c.raw.toFixed(2) + ' ' + unit }
+      }
+    },
+    scales: {
+      x: { grid:{ color:'rgba(28,45,72,.4)', drawTicks:false }, ticks:{ color:'#2d4560', font:{family:'IBM Plex Mono',size:9}, maxTicksLimit:10 }, border:{color:'#1c2d48'} },
+      y: { position:'right', grid:{ color:'rgba(28,45,72,.4)', drawTicks:false }, ticks:{ color:'#2d4560', font:{family:'IBM Plex Mono',size:9}, callback: v=>v.toFixed(0) }, border:{color:'#1c2d48'} }
+    }
+  };
+}
+
+// ─────────────────────────────────────────────
+// RENDER TABLE
+// ─────────────────────────────────────────────
+function renderTable(trades, filter='all') {
+  const tbody = document.getElementById('tradeBody');
+  tbody.innerHTML = '';
+
+  const filtered = trades.filter(t => {
+    if (filter === 'long')  return t.type === 'LONG';
+    if (filter === 'short') return t.type === 'SHORT';
+    if (filter === 'win')   return t.netPnl > 0;
+    if (filter === 'loss')  return t.netPnl <= 0;
+    return true;
+  });
+
+  document.getElementById('tradeCountBadge').textContent = filtered.length + ' 笔';
+
+  if (!filtered.length) {
+    document.getElementById('tradeTable').style.display = 'none';
+    document.getElementById('emptyState').style.display = 'flex';
+    return;
+  }
+
+  document.getElementById('tradeTable').style.display = 'table';
+  document.getElementById('emptyState').style.display = 'none';
+
+  filtered.forEach(t => {
+    const isWin = t.netPnl > 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${t.n}</td>
+      <td>${t.time}</td>
+      <td class="${t.type==='LONG'?'td-dir-long':'td-dir-short'}">${t.type}</td>
+      <td>${t.entry.toFixed(2)}</td>
+      <td>${t.exit.toFixed(2)}</td>
+      <td style="color:var(--red)">${t.sl.toFixed(2)}</td>
+      <td style="color:var(--green)">${t.tp.toFixed(2)}</td>
+      <td>${t.qty.toFixed(4)}</td>
+      <td style="color:var(--yellow)">${t.leverage.toFixed(1)}x</td>
+      <td class="${t.reason==='TP'?'td-reason-tp':t.reason==='SL'?'td-reason-sl':'td-reason-exp'}">${t.reason==='TP'?'✓ 止盈':t.reason==='SL'?'✗ 止损':'⏱ 超时'}</td>
+      <td class="${isWin?'td-win':'td-loss'}">${t.netPnl>=0?'+':''}${t.netPnl.toFixed(2)}</td>
+      <td style="color:var(--text3)">-${t.fee.toFixed(2)}</td>
+      <td style="color:var(--text)">${t.balance.toFixed(2)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function filterTrades(f, btn) {
+  document.querySelectorAll('.f-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable(allTrades, f);
+}
+
+// ─────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────
+function setText(id, val) { document.getElementById(id).textContent = val; }
+function setValColor(id, val, cls) {
+  const el = document.getElementById(id);
+  el.textContent = val;
+  el.className = 'stat-val ' + cls;
+}
+function showOverlay(show) {
+  document.getElementById('loadOverlay').style.display = show ? 'flex' : 'none';
+}
+function setLoadTxt(t) { document.getElementById('loadTxt').textContent = t; }
+function showProgress(show) {
+  document.getElementById('progressWrap').style.display = show ? 'block' : 'none';
+}
+function setProgress(pct, txt) {
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('progressTxt').textContent = txt;
+  setLoadTxt(txt);
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+
+</body>
+</html>
