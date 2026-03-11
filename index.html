@@ -478,73 +478,55 @@ let cachedMonths  = null;
 // ─────────────────────────────────────────────
 // FETCH BINANCE KLINES
 // ─────────────────────────────────────────────
+
+// ─────────────────────────────────────────────
+// FETCH BINANCE KLINES (clean version)
+// ─────────────────────────────────────────────
 async function fetchKlines(months) {
-  var symbol   = 'ETHUSDT';
-  var interval = '10m';
-  var now      = Date.now();
-  var endTime  = now - (now % 86400000); // fixed to last midnight UTC
+  var now       = Date.now();
+  var endTime   = now - (now % 86400000);
   var startTime = endTime - months * 30 * 24 * 60 * 60 * 1000;
-
-  var testSuffix = '/api/v3/klines?symbol=ETHUSDT&interval=10m&limit=3&endTime=' + endTime;
-
-  // All possible sources — tried in order
-  var sources = [
-    { name: 'Binance 直连',    url: function(p){ return 'https://api.binance.com' + p; } },
-    { name: 'Binance api1',    url: function(p){ return 'https://api1.binance.com' + p; } },
-    { name: 'Binance api2',    url: function(p){ return 'https://api2.binance.com' + p; } },
-    { name: 'corsproxy',       url: function(p){ return 'https://corsproxy.io/?' + encodeURIComponent('https://api.binance.com' + p); } },
-    { name: 'allorigins',      url: function(p){ return 'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://api.binance.com' + p); } },
-  ];
-
-  var fetcher = null;
-  var sourceName = '';
-
-  for (var si = 0; si < sources.length; si++) {
-    setLoadTxt('正在尝试: ' + sources[si].name + ' ...');
-    try {
-      var testUrl = sources[si].url(testSuffix);
-      var testResp = await fetch(testUrl);
-      if (testResp.ok) {
-        var testData = await testResp.json();
-        if (Array.isArray(testData) && testData.length > 0) {
-          fetcher = sources[si].url;
-          sourceName = sources[si].name;
-          break;
-        }
-      }
-    } catch(err) { /* try next */ }
-  }
-
-  if (!fetcher) {
-    throw new Error('无法连接到 Binance 数据源。请确认手机已连接网络，然后重试。');
-  }
-
-  setLoadTxt('✓ ' + sourceName + ' 连接成功，正在下载数据...');
-
   var allKlines = [];
   var from = startTime;
+  var bases = [
+    'https://api.binance.com',
+    'https://api1.binance.com',
+    'https://api2.binance.com',
+    'https://api3.binance.com'
+  ];
 
+  // Find working base
+  var base = null;
+  for (var b = 0; b < bases.length; b++) {
+    setLoadTxt('正在连接 ' + bases[b] + ' ...');
+    try {
+      var pingResp = await fetch(bases[b] + '/api/v3/ping');
+      if (pingResp.ok) { base = bases[b]; break; }
+    } catch(e) {}
+  }
+
+  if (!base) throw new Error('无法连接Binance，请检查网络后重试');
+  setLoadTxt('✓ 连接成功: ' + base);
+
+  // Fetch all pages
   while (from < endTime) {
-    var path = '/api/v3/klines?symbol=' + symbol + '&interval=' + interval +
-               '&startTime=' + from + '&endTime=' + endTime + '&limit=1000';
-    var resp = await fetch(fetcher(path));
-    if (!resp.ok) throw new Error('数据获取失败: HTTP ' + resp.status);
+    var url = base + '/api/v3/klines?symbol=ETHUSDT&interval=10m' +
+              '&startTime=' + from + '&endTime=' + endTime + '&limit=1000';
+    var resp = await fetch(url);
+    if (!resp.ok) throw new Error('数据获取失败: ' + resp.status);
     var batch = await resp.json();
     if (!batch || batch.length === 0) break;
     for (var i = 0; i < batch.length; i++) allKlines.push(batch[i]);
     from = batch[batch.length - 1][0] + 1;
-    setLoadTxt('已获取 ' + allKlines.length + ' 根真实K线...');
+    setLoadTxt('已获取 ' + allKlines.length + ' 根K线...');
     if (batch.length < 1000) break;
   }
 
   if (allKlines.length === 0) throw new Error('获取到0根K线，请重试');
 
-  var result = [];
-  for (var j = 0; j < allKlines.length; j++) {
-    var k = allKlines[j];
-    result.push({ t: k[0], o: parseFloat(k[1]), h: parseFloat(k[2]), l: parseFloat(k[3]), c: parseFloat(k[4]) });
-  }
-  return result;
+  return allKlines.map(function(k) {
+    return { t: k[0], o: parseFloat(k[1]), h: parseFloat(k[2]), l: parseFloat(k[3]), c: parseFloat(k[4]) };
+  });
 }
 
 // ─────────────────────────────────────────────
